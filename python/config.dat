@@ -1,0 +1,46 @@
+# Configuration file for the simulation
+
+@current
+Iapp=-0.88 -0.1833 -0.2444 -0.366 -0.73 #The discharge current [A]. A list represents the discharge current at a cycle
+Icharge=0.1833 #0.73 #The charge current [A]
+Irest=both #[d | c | both | none] rest after [d]ischarge, after [c]harge, after [b]oth or none at all
+trest=10 #number of minutes to rest for
+cccv=on #[on | off] cccv charging or just cc charging
+
+
+
+@simConfig
+writeData=file #[sqlite3|file] -> how to write the data
+chargeMethod=individual_cell #[individual_cell|strongest_cell] What type of charge protocol is required?
+numCells=1 # Number of cells in module
+maxCycles=2 # Number of cycles to simulate
+cyclePrintList=1 2 3 4 5 6 7 8 9 10 # print these cycle numbers (and the last cycle)
+printEvery_x_cycles=10 # in addition, print every x cycles
+
+
+#pulses in groups of 3
+#[current | end type | end condition]
+# end type: 0 = voltage | 1 = DOD | 2 = time | 3 = current | 4 = cap
+
+@pulses
+pulse1=-0.88 4 220 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0
+pulse2=-0.88 4 440 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse3=-0.88 4 660 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse4=-0.88 4 880 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse5=-0.88 4 1100 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse6=-0.88 4 1320 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse7=-0.88 4 1540 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse8=-0.88 4 1760 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+pulse9=-0.88 4 1980 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+#pulse10=-0.88 0 2.5 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.3 2 10.0
+
+#pulse1=-0.88 1 0.1 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse2=-0.88 1 0.2 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse3=-0.88 1 0.3 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse4=-0.88 1 0.4 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse5=-0.88 1 0.5 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse6=-0.88 1 0.6 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse7=-0.88 1 0.7 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse8=-0.88 1 0.8 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse9=-0.88 1 0.9 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
+#pulse10=-0.88 0 2.5 0.0 2 3600.0 -4.4 2 10.0 0.0 2 40.0 3.85 2 10.0
