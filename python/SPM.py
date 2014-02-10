@@ -4,7 +4,8 @@
 # Discharge and charge capacities don't match. Verify calculation in excel.
 
 
-import numpy, os, sys, random, shutil, re
+import numpy, os, sys, random, shutil, re, time
+import openpyxl as xl
 from scipy.special import erfc
 from scipy.integrate import cumtrapz
 import scipy.sparse as sparse
@@ -776,7 +777,7 @@ class separatorOrFoil:
 		return self.L/(self.area*ionicConductivity(ce, T, brugg, self.porosity))
 
 class singleCell:
-	def __init__(self, parametersFileName, cycleScheduleFileName, maxCycles,cellNumber,writeData):
+	def __init__(self, parametersFileName, cycleScheduleFileName, maxCycles,cellNumber,writeData,xlInterface=True):
 		
 		def returnLength(parameter):
 			try:
@@ -785,35 +786,57 @@ class singleCell:
 				x=1
 			return x
 			
-		self.schedule = cycleSchedule(cycleScheduleFileName, maxCycles)
+			
+		self.schedule = cycleSchedule(cycleScheduleFileName, maxCycles, xlInterface)
 		
-		parameters = parseConfigFile(parametersFileName)
-		self.T=parameters['@others']['T']
+		######
+		if (xlInterface):
+			print "using excel interface"
+			xlInterface = getInputs("parameters.xlsx")
+			self.schedule.schedule = xlInterface.cycle.tolist() #use the excel file
+			self.schedule.getIapp()
+			pos_parms = xlInterface.positive
+			neg_parms = xlInterface.negative
+			sep_parms = xlInterface.separator
+			Alfoil_parms = xlInterface.Alfoil
+			Cufoil_parms = xlInterface.Cufoil
+			other_parms = xlInterface.others	
+		else:
+			parameters = parseConfigFile(parametersFileName)
+			pos_parms = parameters['@pos']
+			neg_parms = parameters['@neg']
+			sep_parms = parameters['@sep']
+			Alfoil_parms = parameters['@Alfoil']
+			Cufoil_parms = parameters['@Cufoil']
+			other_parms = parameters['@others']		
+
+		self.T=other_parms["T"]	
 		
 		''' Instantiate cell component objects: '''
-		self.cathode = electrode(parameters['@pos'],1,cellNumber,writeData,self.T)
-		self.anode = electrode(parameters['@neg'],2,cellNumber,writeData,self.T)
-		self.sep = separatorOrFoil(parameters['@sep'],cellNumber,writeData)
-		self.Al_foil = separatorOrFoil(parameters['@Alfoil'],cellNumber,writeData)
-		self.Cu_foil = separatorOrFoil(parameters['@Cufoil'],cellNumber,writeData)
-				
+
+		self.cathode = electrode(pos_parms,1,cellNumber,writeData,self.T)
+		self.anode = electrode(neg_parms,2,cellNumber,writeData,self.T)
+		self.sep = separatorOrFoil(sep_parms,cellNumber,writeData)
+		self.Al_foil = separatorOrFoil(Alfoil_parms,cellNumber,writeData)
+		self.Cu_foil = separatorOrFoil(Cufoil_parms,cellNumber,writeData)
+			
 		self.Tamb=self.T
 		self.TcoolantOut = self.T
 		self.Qheat = 0
 		
-		self.isothermal=parameters['@others']['isothermal']
-		self.ce=parameters['@others']['ce']
-		self.Cp=parameters['@others']['Cp']
-		self.h=parameters['@others']['h']
-		self.Aexposed=parameters['@others']['Aexposed']
-		self.alpha=parameters['@others']['alpha']
-		self.maxVcell=parameters['@others']['maxVcell']
-		self.minVcell=parameters['@others']['minVcell']
-		self.IcutOff=parameters['@others']['IcutOff']
+		self.isothermal=other_parms['isothermal']
+		self.ce=other_parms['ce']
+		self.Cp=other_parms['Cp']
+		self.h=other_parms['h']
+		self.Aexposed=other_parms['Aexposed']
+		self.alpha=pos_parms['alpha']
+		self.maxVcell=other_parms['maxVcell']
+		self.minVcell=other_parms['minVcell']
+		self.IcutOff=other_parms['IcutOff']
 		
 		self.electrolyteFactor = {'A':0,'Ea':0}
-		self.electrolyteFactor['A'] = {2:lambda:parameters['@others']['electrolyteFactor'][0],1:lambda:parameters['@others']['electrolyteFactor']}[returnLength(parameters['@others']['electrolyteFactor'])]()
-		self.electrolyteFactor['Ea'] = {2:lambda:parameters['@others']['electrolyteFactor'][1],1:lambda:0}[returnLength(parameters['@others']['electrolyteFactor'])]()
+		self.electrolyteFactor['A'] = {2:lambda:other_parms['electrolyteFactor'][0],1:lambda:other_parms['electrolyteFactor']}[returnLength(other_parms['electrolyteFactor'])]()
+		self.electrolyteFactor['Ea'] = {2:lambda:other_parms['electrolyteFactor'][1],1:lambda:0}[returnLength(other_parms['electrolyteFactor'])]()
 
 		self.totMass = self.cathode.mass+self.sep.mass+self.anode.mass+self.Al_foil.mass+self.Cu_foil.mass
 		self.totVolume = self.cathode.volume+self.sep.volume+self.anode.volume+self.Al_foil.volume+self.Cu_foil.volume
@@ -1100,14 +1123,14 @@ class singleCell:
 		self.schedule.Iapp['present'] = Iapp
 					
 class cycleSchedule:
-	def __init__(self, scheduleFileName, maxCycles):
+	def __init__(self, scheduleFileName, maxCycles, xlInterface):
 		
 		self.schedule = []
-		self.parseCycleScheduleFile(scheduleFileName)
+		if (not xlInterface): self.parseCycleScheduleFile(scheduleFileName)
 		self.step = 0
 		self.cycle = 0
 		self.Iapp = {'present': 0, 'last_timestep': 0}
-		self.getIapp()
+		if (not xlInterface): self.getIapp() #this needs to be held off until self.schedule is populated
 		self.maxCycles = maxCycles
 		self.dt = 0.1
 		self.stepIterations = 0
@@ -1242,30 +1265,208 @@ class cycleSchedule:
 		self.stepTime+=self.dt
 		self.totTime+=self.dt
 
+class getInputs:
+	'''
+	Grab input data from an excel spreadsheet using the openpyxl module
+	
+	Usage:
+	inputs = getInputs("input_data.xlsx")
+	parameters: inputs.positive,inputs.negative,inputs.Alfoil,inputs.Cufoil,inputs.Others,inputs.Separator
+	'''
+	
+	def __init__(self,workbook):
+		self.workbook = workbook
+		self.worksheet = ["parameters", "cycle"]
+		
+		search_string = ["Positive","Negative","Al Foil","Cu Foil","Others","Separator","Cycle Conditions"]
+		
+		self.positive = self.getParameters(search_string[0],self.worksheet[0])
+		self.negative = self.getParameters(search_string[1],self.worksheet[0])
+		self.Alfoil = self.getParameters(search_string[2],self.worksheet[0])
+		self.Cufoil = self.getParameters(search_string[3],self.worksheet[0])
+		self.others = self.getParameters(search_string[4],self.worksheet[0])
+		self.separator = self.getParameters(search_string[5],self.worksheet[0])
+		self.cycle = self.getCycleSchedule(search_string[6],self.worksheet[1])
+
+	def findCells(self,cells,search_string):
+		'''
+		Returns the row and col numbers of the search_string in an xls document
+		cells is an openpyxl object
+	
+		Example: findCells(cells,"hot input") = [4,1]
+		'''
+	
+		maxRows = numpy.shape(cells)[0]
+		maxCols = numpy.shape(cells)[1]
+
+	
+		col=0;row=0
+		for i in range(maxRows):
+			for j in range(maxCols):
+				if (cells[i][j].value == search_string):
+					col=j;row=i
+					return [row,col] 
+
+	def convertToSIunits(self,dic_values,dic_units):
+		'''
+		Simple routine to convert common units into SI units	
+		'''
+		for keys in dic_units:
+			try:
+				dic_values[keys] = {
+				'mm': lambda : dic_values[keys]/1000.0,
+				'in': lambda : dic_values[keys]*25.4/1000.0,
+				'um': lambda : dic_values[keys]/1.0e6,
+				'mm^2': lambda : dic_values[keys]/1000.0/1000.0,
+				'in^2': lambda : dic_values[keys]*25.4/1000.0*25.4/1000.0,
+				'um^2' : lambda : dic_values[keys]/1.0e6/1.0e6,
+				'C': lambda : dic_values[keys]+273.15}[dic_units[keys]]()
+			except:
+				pass
+
+		return dic_values	
+	
+	def returnInputs(self,cells,start_index):
+		'''
+		Returns a dictionary of hot_side and cold_side inputs from the input_data.xlsx file
+		'''
+		
+		def returnFloat(val):
+			try:
+				return float(val)
+			except:
+				return val
+		
+		startRow = start_index[0]+2
+		startCol = start_index[1]+2
+		values = []
+		keys = []
+		units = []
+	
+		max_num_keys = 50
+	
+		for i in range(max_num_keys):
+			try:
+				keys.append(cells[startRow+i][startCol].value.replace(" ","_"))
+				if (cells[startRow+i][startCol+2].value == None):
+					val = returnFloat(cells[startRow+i][startCol+1].value)
+				else:
+					val = returnFloat([cells[startRow+i][startCol+1].value,cells[startRow+i][startCol+2].value])
+				
+				values.append(val)
+				units.append(cells[startRow+i][startCol+3].value)
+			except IndexError:
+				break
+			except AttributeError:
+				break
+
+		parms = dict(zip(keys,values))
+		#parms["fit_Nu"]=None
+		units = dict(zip(keys,units))
+		#units["fit_Nu"]=""
+	
+		return self.convertToSIunits(parms,units)
+		
+	def getExperimentalData(self,side,worksheet):
+		'''
+		Get experimental data from excel file
+		'''	
+		import openpyxl as xl
+
+		max_num_data = 100
+		
+		data = []
+		
+		wb = xl.load_workbook(filename = self.workbook)
+		sheet = wb.get_sheet_by_name(name = worksheet)
+		cells = sheet.rows		
+		
+		id = self.findCells(cells,side)
+		startRow = id[0]+3
+		startCol = id[1]
+		
+		for i in range(max_num_data):
+			try:
+				if (cells[startRow+i][startCol].value == None): break				
+				d1=[]
+				[d1.append(cells[startRow+i][startCol+j].value) for j in range(7)]
+				data.append(d1)		
+			except IndexError:
+				break
+			except AttributeError:
+				break
+		
+		return numpy.array(data)
+		
+	def getParameters(self,search_string,worksheet):
+
+		wb = xl.load_workbook(filename = self.workbook)
+		sheet = wb.get_sheet_by_name(name = worksheet)
+		cells = sheet.rows
+	
+		return self.returnInputs(cells,self.findCells(cells,search_string))
+
+	def getCycleSchedule(self,side,worksheet):
+		'''
+		Get cycle schedule from excel file
+		'''	
+
+		data = []
+		cols = [0,1,3,4,5]
+		
+		wb = xl.load_workbook(filename = self.workbook)
+		sheet = wb.get_sheet_by_name(name = worksheet)
+		cells = sheet.rows		
+		
+		max_num_data = numpy.shape(cells)[0]
+		
+		
+		id = self.findCells(cells,side)
+		startRow = id[0]+2
+		startCol = id[1]+1
+		
+		for i in range(max_num_data):
+			try:
+				if (cells[startRow+i][startCol].value == None): break				
+				d1=[]
+				[d1.append(cells[startRow+i][startCol+j].value) for j in cols]
+				data.append(d1)		
+			except IndexError:
+				break
+			except AttributeError:
+				break
+		
+		return numpy.array(data)
 
 		
 #---------------------------------------------------------------------
+def main():
+	cell1 = singleCell("parameters0.dat","initial_steps.dat",maxCycles=5,cellNumber=1,writeData=0)
+	#schedule = cycleSchedule("initial_steps.dat", 2)
 
-cell1 = singleCell("parameters0.dat","initial_steps.dat",5,1,0)
-#schedule = cycleSchedule("initial_steps.dat", 2)
+	V = cell1.V
+	print V
+	time = 0
+	run = 1
+	data = 1
 
-V = cell1.V
-print V
-time = 0
-run = 1
-data = 1
-
-while (run == 1):
-	cell1.schedule.advanceTime()
-	cell1.calcCellVoltage()
-	data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc])
-	#writeData("cell1.dat",[cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]])
-	#print("{0},{1},{2},{3},{4},{5}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]))
- 	cell1.schedule.checkStopCondition(cell1.V['present'])
- 	cell1.schedule.set_dt(cell1.V['present'])
- 	#check for end of run
- 	run = {True:lambda:0,False:lambda:1}[cell1.schedule.cycle > cell1.schedule.maxCycles]()
+	while (run == 1):
+		cell1.schedule.advanceTime()
+		cell1.calcCellVoltage()
+		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc])
+		#writeData("cell1.dat",[cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]])
+		#print("{0},{1},{2},{3},{4},{5}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]))
+		cell1.schedule.checkStopCondition(cell1.V['present'])
+		cell1.schedule.set_dt(cell1.V['present'])
+		#check for end of run
+		run = {True:lambda:0,False:lambda:1}[cell1.schedule.cycle > cell1.schedule.maxCycles]()
 
 
-colNames="cycle,step,totTime,stepTime,I,V,dCap,cCap,posSOC,negSOC"
-saveData('cell1.csv',data,colNames)
+	colNames="cycle,step,totTime,stepTime,I,V,dCap,cCap,posSOC,negSOC"
+	saveData('cell1.csv',data,colNames)
+
+if __name__ == "__main__":		
+	start_time = time.time()
+	main()
+	print time.time()-start_time, " seconds"
+	

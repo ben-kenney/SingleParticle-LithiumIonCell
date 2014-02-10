@@ -20,6 +20,7 @@ Erefs=0.4 #reference voltage for side reaction
 ks=0.5e-5 #electrical conductivity of SEI layer [S/m]
 Rsei=0.0 #initial resistance of side reaction (we use Lsei0 instead)
 DsFactor=2.02
+alpha=0.5
 
 @neg
 type=MCMB2
@@ -43,6 +44,7 @@ Erefs=0.4
 ks=0.5e-5
 Rsei=0.0
 DsFactor=1.0
+alpha=0.5
 
 @sep
 type=separator
