@@ -9,6 +9,7 @@ import openpyxl as xl
 from scipy.special import erfc
 from scipy.integrate import cumtrapz
 import scipy.sparse as sparse
+import scipy.optimize
 from operator import itemgetter
 from time import clock
 from datetime import datetime
@@ -488,6 +489,7 @@ class electrode:
 		self.i0s['Ea'] = {2:lambda:parameters['i0s'][1],1:lambda:0}[returnLength(parameters['i0s'])]()
 
 		self.soc=parameters['soc0']
+		self.soc0=parameters['soc0']
 		#self.soc0_dch=parameters['soc0_dch']
 		
 		self.DsFactor = parameters['DsFactor']
@@ -495,7 +497,7 @@ class electrode:
 		''' side reaction parameters '''
 		self.Ms=parameters['Ms'] # molar mass of sei
 		self.rhos=parameters['rhos'] # density of sei
-		self.Lsei=parameters['Lsei'] # sei thickness
+		self.Lsei = {'present': parameters['Lsei'], 'last_timeStep': parameters['Lsei']} # sei thickness
 		self.Lsei0=parameters['Lsei0'] # sei thickness at t=0
 		self.Erefs=parameters['Erefs'] # Eref of side reaction
 		self.ks=parameters['ks'] # conductivity of sei
@@ -530,8 +532,15 @@ class electrode:
 		
 		self.N = 25 # number of grid points for finite difference method
 		self.socList = numpy.transpose([numpy.ones(self.N)*self.soc])
+		self.socList_lastTimeStep = numpy.transpose([numpy.ones(self.N)*self.soc])
+		
 		self.J = {'J' : 0.0, 'Js' : 0.0}
-		self.phi = {'present' : Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge), 'old' : Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge)} #{'present' : 4.2, 'old' : 4.2}
+		self.J_last_timeStep = {'J' : 0.0, 'Js' : 0.0}
+		self.intJ = {'present' : 0.0, 'last_timeStep': 0.0}
+		
+		
+		self.phi = {'present' : Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge), 'old' : Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge), 'last_timeStep' : 0} #{'present' : 4.2, 'old' : 4.2}
+
 		self.eta = 0
 		self.Rp_val = 0
 		
@@ -555,12 +564,17 @@ class electrode:
 		''' returns the surface area of the electrode in m^2 '''
 		return (3.0*self.volFracSolids(self.activeMaterialType)*(1-self.porosity)/self.Rp)*self.L*self.area
 	
+	def locCurrent1(self, Iapp):
+		''' Returns the intercalaction current density in either anode or cathode '''			
+		changeSign = {2: lambda : -1.0, 1: lambda : 1.0}[self.electrodeType]()
+		self.J_last_timeStep['J'] = self.J['J']
+		self.J['J'] = changeSign*Iapp/self.surfaceArea - self.J['Js']
+		return self.J['J'] #changeSign*Iapp/self.surfaceArea
+	
 	def locCurrent(self, Iapp):
-			''' Returns the intercalaction current density in either anode or cathode '''			
-			changeSign = {2: lambda : -1.0, 1: lambda : 1.0}[self.electrodeType]()
-			
-			self.J['J'] = changeSign*Iapp/self.surfaceArea - self.J['Js']
-			return self.J['J'] #changeSign*Iapp/self.surfaceArea
+		changeSign = {2: lambda : -1.0, 1: lambda : 1.0}[self.electrodeType]()
+		self.J['J'] = changeSign*Iapp/self.surfaceArea - self.J['Js']
+		return self.J['J']
 	
 	def storeFDData(self, soc):
 		self.socAll = soc
@@ -568,7 +582,7 @@ class electrode:
 	def applySideReactionCorrection(self, theta, cycle):
 		''' reduces the concentration in the pos electrode by amount theta '''
 		self.socAll = self.socAll-theta
-		
+
 	def finiteDifference(self, dt, Iapp, totTime, T):				
 		''' 
 		Solves FD speherical diffusion equation: 
@@ -576,6 +590,7 @@ class electrode:
 		Crank Nicholson (forward in time) scheme
 		For cluster: remove all sparse matrices, use soc = numpy.mat(scipy.linalg.inv(A)*b)
 		'''
+
 		
 		J = self.locCurrent(Iapp)
 		
@@ -646,29 +661,70 @@ class electrode:
 				I = numpy.eye(N) #for the cluster
 					
 			A = (I - dt/2.0*D1 - dt/2.0*D2)
-			b = (I + dt/2.0*D1 + dt/2.0*D2)*self.socList+dt*F
+			b = (I + dt/2.0*D1 + dt/2.0*D2)*self.socList_lastTimeStep+dt*F
 
 			try:
-				self.socList = numpy.transpose(numpy.mat(scipy.sparse.linalg.spsolve(A, b)))			
+				socList = numpy.transpose(numpy.mat(scipy.sparse.linalg.spsolve(A, b)))			
 			except:
-				self.socList = numpy.mat(scipy.linalg.inv(A)*b) #cluster
-			self.socList = numpy.array(self.socList)
+				socList = numpy.mat(scipy.linalg.inv(A)*b) #cluster
+			
+			self.socList = numpy.array(socList)
 
 		return self.socList
+
+	def save_lastTimeStep(self):
+		self.socList_lastTimeStep = self.socList
+		#self.Iapp['last_timeStep'] = self.Iapp['present']
+		self.J_last_timeStep['J'] = self.J['J']
+		self.J_last_timeStep['Js'] = self.J['Js']
+		self.intJ['last_timeStep'] = self.intJ['present']
+		self.phi['last_timeStep'] = self.phi['present']
+		self.Lsei['last_timeStep'] = self.Lsei['present']
+
+	def calc_intJ(self, dt, Iapp):
+		J = self.locCurrent(Iapp)
+		self.intJ['present'] = self.intJ['last_timeStep'] + ((J/96485.0+self.J_last_timeStep['J']/96485.0)/2.0)*dt;
+		return self.intJ['present']
 	
-	def calcSOC(self, dt, Iapp, totTime, T):
+	def polynomialApproximation(self, dt, Iapp, T):
+		
+		'''
+		Note: This function is not ready yet.
+		The problem is during cv mode, intJ["last_timeStep"] will be updated during inner iterations
+		which is not the proper method.
+		
+		'''
+		
+		
+		J = self.locCurrent(Iapp)
+
+		Ds = arrhenius(self.Ds['A'],self.Ds['Ea'],T)
+		#K = Ds/self.Rp/self.Rp
+		
+		intJ = self.calc_intJ(dt,Iapp)
+		c_avg = -3.0/self.Rp*intJ + self.cmax*self.soc0; #c_avg_pos_last_timeStep;
+		c_surf = (-J/96485.0/5.0+c_avg*Ds/self.Rp)*self.Rp/Ds;
+		
+		return c_surf/self.cmax;
+
+	def calcSOC(self, dt, Iapp, totTime, T, method="fd"):
 		'''
 		Calculate the soc at time totTime
 		Basically a wrapper for finiteDifference method
 		'''
-		soc = self.finiteDifference(dt, Iapp, totTime, T)
-		self.soc = soc[-1][0]
-						
-	def butlerVolmer(self, Iapp, ce, soc, alpha, T):
+		if (method == "fd"):
+			soc = self.finiteDifference(dt, Iapp, totTime, T)
+			self.soc = soc[-1][0]
+		
+		elif (method == "pa"):
+			self.soc = self.polynomialApproximation(dt, Iapp, T)
+									
+	def butlerVolmer(self, Iapp, ce, alpha, T):
 		''' Uses BV expression to calc eta '''
 		Rg = 8.3145
 		F = 96485.0
 		J = self.locCurrent(Iapp)
+		soc = self.soc
 		
 		if (soc > 1.0): 
 			soc = 0.99999
@@ -689,7 +745,7 @@ class electrode:
 		self.eta = Rg*T/F/alpha*numpy.log(constant);
 		return self.eta
 	
-	def RpCalc(self, J, ce, soc, T, Rsei):
+	def RpCalc(self, J, ce, T, Rsei):
 		''' 
 		Calculates polarization resistance of electrode using di/deta ohm m^2 geometric area
 		'''
@@ -697,6 +753,7 @@ class electrode:
 		Rg = 8.3145
 		F = 96485.0
 		alpha = 0.5
+		soc = self.soc
 		i0 = F*arrhenius(self.kct['A'],self.kct['Ea'],T)*numpy.power(self.cmax-soc*self.cmax,0.5)*numpy.power(soc*self.cmax,0.5)*numpy.power(ce,0.5)
 		self.butlerVolmer(J, ce, soc, alpha, T)
 		
@@ -712,7 +769,7 @@ class electrode:
 		JRfilm = self.locCurrent(Iapp)*self.Rsei
 		
 		self.phi["old"] = self.phi["present"]
-		self.phi["present"] = self.butlerVolmer(Iapp, ce, self.soc, alpha, T) + Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge) + JRfilm
+		self.phi["present"] = self.butlerVolmer(Iapp, ce, alpha, T) + Eref(self.activeMaterialType,self.soc,T,self.Eref_fudge) + JRfilm
 		
 	def ohmicResistance(self, Iapp, T, ce, brugg):
 		''' returns the ohmic resistance of the electrode '''
@@ -749,11 +806,11 @@ class electrode:
 
 		
 		#Lfilm = -Js*M/rho/F*dt+LfilmOld	
-		Lsei = -self.J['Js']*self.Ms/self.rhos/F*dt+self.Lsei		
+		Lsei = -self.J['Js']*self.Ms/self.rhos/F*dt+self.Lsei['last_timeStep']		
 		Rsei = Lsei/self.ks
 		
 		self.Rsei = Rsei
-		self.Lsei = Lsei
+		self.Lsei['present'] = Lsei
 		
 	def Iapp(self):
 		'''
@@ -1009,34 +1066,9 @@ class singleCell:
 		Calculate the cell voltage for the next time step
 		'''
 		
-		dt = self.schedule.dt
-		totTime = self.schedule.totTime
-		cycle = self.schedule.cycle
 		
-		cvIteration = 1 #flag for constant voltage mode
-		
-		self.V['last_timeStep'] = self.V['present'] #set last V here, otherwise cv iterations will mess it up
-		self.resetCapacities()
-			
-		
-		while (cvIteration == 1):
-		
-		
-			if (self.schedule.mode == "cc"):
-				Iapp = self.schedule.Iapp['present']
-			elif (self.schedule.mode == "cv"):
-				self.cvGuess()
-				Iapp = self.schedule.Iapp['present']
-			
-		
-		
-			#---------------
-			#Technically this should all be moved into the while loop.
-			#Check to see the impact. Keeping out of the loop is faster since
-			#soc only has to be calculated once.	
-		
-			#self.calcTemperature(Iapp, dt, totTime)
-		
+		def V_cell(Iapp,cycle,totTime,dt):
+	
 			#calc SEI film thickness and resistance
 			self.anode.Rfilm(dt)
 			self.cathode.Rfilm(dt)
@@ -1050,8 +1082,9 @@ class singleCell:
 			if (self.cathode.activeMaterialType == 'NMC'): self.cathode.Ds['A'] = self.cathode.DsFactor*returnDs(self.cathode.soc,'NMC')
 		
 		
-			self.cathode.calcSOC(dt, Iapp, totTime, self.T) #calc soc cathode
-			self.anode.calcSOC(dt, Iapp, totTime, self.T) #calc soc anode		
+			self.cathode.calcSOC(dt, Iapp, totTime, self.T, method="fd") #calc soc cathode
+			self.anode.calcSOC(dt, Iapp, totTime, self.T, method="fd") #calc soc anode	
+				
 			#---------------
 			
 			VoldIt = 0
@@ -1075,14 +1108,52 @@ class singleCell:
 					print("Warning: Internal voltage iterations are at {0} but moving on.".format(its))
 					doneInternalIts = 1
 			
-			self.V["present"] = V
+			return V
+
+		def cv_residual(Iapp,Vtarget,cycle,totTime,dt):
+			'''
+			Return the residual for constant voltage current search
+			'''
+			V = V_cell(Iapp,cycle,totTime,dt)
+			sse = (Vtarget-V)**2.0
+			return sse			
+		
+		dt = self.schedule.dt
+		totTime = self.schedule.totTime
+		cycle = self.schedule.cycle
+		
+		cvIteration = 1 #flag for constant voltage mode
+		
+		self.V['last_timeStep'] = self.V['present'] #set last V here, otherwise cv iterations will mess it up
+		self.resetCapacities()
+			
+		while (cvIteration == 1):
+		
+		
+			if (self.schedule.mode == "cc"):
+				Iapp = self.schedule.Iapp['present']
+			elif (self.schedule.mode == "cv"):
+				self.cvGuess()
+				Iapp = self.schedule.Iapp['present']		
+		
+			#---------------
+			#Technically this should all be moved into the while loop.
+			#Check to see the impact. Keeping out of the loop is faster since
+			#soc only has to be calculated once.	
+		
+			#self.calcTemperature(Iapp, dt, totTime)
+			self.V["present"] = V_cell(Iapp,cycle,totTime,dt)
 			
 			if (self.schedule.mode == "cv" and numpy.abs(self.V['present']-self.schedule.schedule[self.schedule.step][1]) < 1e-3):
 				cvIteration = 0
 			elif (self.schedule.mode == "cc"):
-				cvIteration = 0
+				cvIteration = 0	
+
 		
 		#done cv iterations
+		
+		self.cathode.save_lastTimeStep()
+		self.anode.save_lastTimeStep()
 		self.calcCapacity()
 			
 	def cvGuess(self):
@@ -1455,7 +1526,7 @@ def main():
 		cell1.calcCellVoltage()
 		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc])
 		#writeData("cell1.dat",[cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]])
-		#print("{0},{1},{2},{3},{4},{5}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]))
+		print("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc, cell1.anode.J['J'], cell1.anode.J_last_timeStep['J'],cell1.anode.intJ['present'],cell1.anode.intJ['last_timeStep']))
 		cell1.schedule.checkStopCondition(cell1.V['present'])
 		cell1.schedule.set_dt(cell1.V['present'])
 		#check for end of run
