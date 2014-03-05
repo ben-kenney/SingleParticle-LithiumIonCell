@@ -843,10 +843,12 @@ class singleCell:
 				x=1
 			return x
 			
+		def returnSolver(string):
+			return {True:lambda:"fd",False:lambda:"pa"}[string=="Finite difference"]()
 			
 		self.schedule = cycleSchedule(cycleScheduleFileName, maxCycles, xlInterface)
 		
-		######
+		###### use the excel interface for specifying model parameters
 		if (xlInterface):
 			print "using excel interface"
 			xlInterface = getInputs("parameters.xlsx")
@@ -857,7 +859,9 @@ class singleCell:
 			sep_parms = xlInterface.separator
 			Alfoil_parms = xlInterface.Alfoil
 			Cufoil_parms = xlInterface.Cufoil
-			other_parms = xlInterface.others	
+			other_parms = xlInterface.others
+			self.pos_solver = returnSolver(xlInterface.positive["method"])
+			self.neg_solver = returnSolver(xlInterface.negative["method"])
 		else:
 			parameters = parseConfigFile(parametersFileName)
 			pos_parms = parameters['@pos']
@@ -865,7 +869,9 @@ class singleCell:
 			sep_parms = parameters['@sep']
 			Alfoil_parms = parameters['@Alfoil']
 			Cufoil_parms = parameters['@Cufoil']
-			other_parms = parameters['@others']		
+			other_parms = parameters['@others']	
+			self.pos_solver = "pa"
+			self.neg_solver = "pa"	
 
 		self.T=other_parms["T"]	
 		
@@ -881,7 +887,7 @@ class singleCell:
 		self.TcoolantOut = self.T
 		self.Qheat = 0
 		
-		self.isothermal=other_parms['isothermal']
+		self.isothermal={True:lambda:True,False:lambda:False}[other_parms['isothermal']=="yes"]()
 		self.ce=other_parms['ce']
 		self.Cp=other_parms['Cp']
 		self.h=other_parms['h']
@@ -1015,43 +1021,45 @@ class singleCell:
 		self.Tamb = (TcoolantIn+self.TcoolantOut) / 2.0 #Tamb is the average of inlet/outlet Tamb
 		
 	def calcTemperature(self, Iapp, dt, totTime):		
-		if (self.isothermal == 'no'):
-			Cp = self.Cp
-			V = self.totVolume
-			rho = (self.cathode.mass+self.sep.mass+self.anode.mass)/(self.cathode.volume+self.sep.volume+self.anode.volume)
-			dUdT_pos = dUdT(self.cathode.activeMaterialType,self.cathode.soc)
-			dUdT_neg = dUdT(self.anode.activeMaterialType,self.anode.soc)
-			Rohmic = self.Rohm(Iapp)
-			h = self.h
-			Aexposed = self.Aexposed
-			Told = self.T
-			Tamb = self.Tamb
-			eta_pos=self.cathode.eta
-			eta_neg=self.anode.eta
-			numerator = Cp*rho*Told*V+dt*Rohmic*Iapp*Iapp+(dt*eta_pos-dt*eta_neg)*Iapp+dt*h*Tamb*Aexposed
-			denominator = Cp*rho*V+(dt*dUdT_neg-dt*dUdT_pos)*Iapp+dt*h*Aexposed
-			T = numerator/denominator		
+		'''
+		Solve a simple energy balance
 		
-			#print("Cellnumber={0}, T={1}, Told={2}, dt={3}, eta_pos={4}, eta_neg={5}, Iapp={6}, Tamb={7}, soc_pos={8}, soc_neg={9}, totTime={10}".format(cellNumber,T,Told,dt,eta_pos,eta_neg,Iapp,Tamb,soc_pos,soc_neg,totTime))
-			#print("cellNumber={0},T={1}".format(cellNumber,T))
-			
-			'''
-			#4th order runge-kutta
-			T1 = Told
-			K1=(Iapp*(eta_pos-eta_neg)+Iapp*T1*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T1))/rho/Cp/V
-			T2 = Told+K1*dt/2.0
-			K2= (Iapp*(eta_pos-eta_neg)+Iapp*T2*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T2))/rho/Cp/V
-			T3 = Told+K2*dt/2.0
-			K3=(Iapp*(eta_pos-eta_neg)+Iapp*T3*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T3))/rho/Cp/V
-			T4 = Told+K3*dt
-			K4=(Iapp*(eta_pos-eta_neg)+Iapp*T4*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T4))/rho/Cp/V
+		'''
+		Cp = self.Cp
+		V = self.totVolume
+		rho = (self.cathode.mass+self.sep.mass+self.anode.mass)/(self.cathode.volume+self.sep.volume+self.anode.volume)
+		dUdT_pos = dUdT(self.cathode.activeMaterialType,self.cathode.soc)
+		dUdT_neg = dUdT(self.anode.activeMaterialType,self.anode.soc)
+		Rohmic = self.Rohm(Iapp)
+		h = self.h
+		Aexposed = self.Aexposed
+		Told = self.T
+		Tamb = self.Tamb
+		eta_pos=self.cathode.eta
+		eta_neg=self.anode.eta
+		numerator = Cp*rho*Told*V+dt*Rohmic*Iapp*Iapp+(dt*eta_pos-dt*eta_neg)*Iapp+dt*h*Tamb*Aexposed
+		denominator = Cp*rho*V+(dt*dUdT_neg-dt*dUdT_pos)*Iapp+dt*h*Aexposed
+		T = numerator/denominator		
+	
+		#print("Cellnumber={0}, T={1}, Told={2}, dt={3}, eta_pos={4}, eta_neg={5}, Iapp={6}, Tamb={7}, soc_pos={8}, soc_neg={9}, totTime={10}".format(cellNumber,T,Told,dt,eta_pos,eta_neg,Iapp,Tamb,soc_pos,soc_neg,totTime))
+		#print("cellNumber={0},T={1}".format(cellNumber,T))
+		
+		'''
+		#4th order runge-kutta
+		T1 = Told
+		K1=(Iapp*(eta_pos-eta_neg)+Iapp*T1*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T1))/rho/Cp/V
+		T2 = Told+K1*dt/2.0
+		K2= (Iapp*(eta_pos-eta_neg)+Iapp*T2*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T2))/rho/Cp/V
+		T3 = Told+K2*dt/2.0
+		K3=(Iapp*(eta_pos-eta_neg)+Iapp*T3*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T3))/rho/Cp/V
+		T4 = Told+K3*dt
+		K4=(Iapp*(eta_pos-eta_neg)+Iapp*T4*(dUdT_pos-dUdT_neg)+Iapp*Iapp*Rohmic+h*Aexposed*(Tamb-T4))/rho/Cp/V
 
-			T = Told + (1/6)*(K1+2*K2+2*K3+K4)*dt
-			'''
-			
-			self.T = T
-		else:
-			pass
+		T = Told + (1/6)*(K1+2*K2+2*K3+K4)*dt
+		'''
+		if (T > 60+273.15): print "Warning: T=",T,"K"
+		self.T = T
+
 	
 	def Rohm(self,Iapp):
 		'''
@@ -1082,8 +1090,8 @@ class singleCell:
 			if (self.cathode.activeMaterialType == 'NMC'): self.cathode.Ds['A'] = self.cathode.DsFactor*returnDs(self.cathode.soc,'NMC')
 		
 		
-			self.cathode.calcSOC(dt, Iapp, totTime, self.T, method="fd") #calc soc cathode
-			self.anode.calcSOC(dt, Iapp, totTime, self.T, method="fd") #calc soc anode	
+			self.cathode.calcSOC(dt, Iapp, totTime, self.T, method=self.pos_solver) #calc soc cathode
+			self.anode.calcSOC(dt, Iapp, totTime, self.T, method=self.neg_solver) #calc soc anode	
 				
 			#---------------
 			
@@ -1141,7 +1149,9 @@ class singleCell:
 			#Check to see the impact. Keeping out of the loop is faster since
 			#soc only has to be calculated once.	
 		
-			#self.calcTemperature(Iapp, dt, totTime)
+			
+			if (not self.isothermal): self.calcTemperature(Iapp, dt, totTime)
+			
 			self.V["present"] = V_cell(Iapp,cycle,totTime,dt)
 			
 			if (self.schedule.mode == "cv" and numpy.abs(self.V['present']-self.schedule.schedule[self.schedule.step][1]) < 1e-3):
@@ -1524,17 +1534,17 @@ def main():
 	while (run == 1):
 		cell1.schedule.advanceTime()
 		cell1.calcCellVoltage()
-		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc])
-		#writeData("cell1.dat",[cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"]])
-		print("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc, cell1.anode.J['J'], cell1.anode.J_last_timeStep['J'],cell1.anode.intJ['present'],cell1.anode.intJ['last_timeStep']))
+		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc,cell1.T])
+		#print("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc, cell1.anode.J['J'], cell1.anode.J_last_timeStep['J'],cell1.anode.intJ['present'],cell1.anode.intJ['last_timeStep']))
 		cell1.schedule.checkStopCondition(cell1.V['present'])
 		cell1.schedule.set_dt(cell1.V['present'])
-		#check for end of run
+		#check for end of simulation
 		run = {True:lambda:0,False:lambda:1}[cell1.schedule.cycle > cell1.schedule.maxCycles]()
 
 
-	colNames="cycle,step,totTime,stepTime,I,V,dCap,cCap,posSOC,negSOC"
-	saveData('cell1.csv',data,colNames)
+	print "Saving output to cell1.csv"
+	colNames="cycle,step,totTime,stepTime,I,V,dCap,cCap,posSOC,negSOC,Temp"
+	saveData('cell1.csv',data,headers=colNames)
 
 if __name__ == "__main__":		
 	start_time = time.time()
