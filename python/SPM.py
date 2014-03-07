@@ -229,7 +229,7 @@ def Eref(material,soc,T,fudge=0):
 	def LCO(soc):
 		if (soc < 0.43):
 			print('soc is too low for LCO cathode. Fixing soc=0.43\n')
-			return 0.43
+			soc = 0.43
 		x = numpy.array([-4.656, 88.669, -401.119, 342.909, -462.471, 433.434, -1, 18.933, -79.532, 37.311, -73.083, 95.96])			
 		return (x[0]+x[1]*numpy.power(soc,2)+x[2]*numpy.power(soc,4)+x[3]*numpy.power(soc,6)+x[4]*numpy.power(soc,8)+x[5]*numpy.power(soc,10))/( x[6]+x[7]*numpy.power(soc,2)+x[8]*numpy.power(soc,4)+x[9]*numpy.power(soc,6)+x[10]*numpy.power(soc,8)+x[11]*numpy.power(soc,10) )
 	def MCMB1(soc):			
@@ -240,7 +240,7 @@ def Eref(material,soc,T,fudge=0):
 		return -0.16 + 1.32*numpy.exp(-3.0*soc) + 10.0*numpy.exp(-2000.0*soc)
 	def MCMB2(soc):
 		if (soc < 0.006):
-			return 0.006
+			soc = 0.006
 		x = numpy.array([0.7222, 0.1387, 0.029, -0.0172, 0.0019, 0.2808, -0.7984])
 		return (x[0]+x[1]*soc+x[2]*numpy.sqrt(soc)+x[3]/soc+x[4]/numpy.power(soc,1.5)+x[5]*numpy.exp(0.9-15.0*soc)+x[6]*numpy.exp(0.4465*soc-0.4108))		
 	
@@ -286,7 +286,7 @@ def saveData(fileName, data,headers):
 	'''
 	if (sum(data[0,:]) == 0): data=numpy.delete(data,0,0)
 	numpy.savetxt(fileName,data,delimiter=',',header=headers)
-
+	
 #-----------------------------------------------
 
 def timeControl(dt, dt_fixed, voltage, dV, Iapp, step, stepIterations, IcutOff, trest, stepTime, maxV, minV, dtpulse, pulseTime, DOD, capacity, pulseSchedule ):
@@ -689,17 +689,12 @@ class electrode:
 	def polynomialApproximation(self, dt, Iapp, T):
 		
 		'''
-		Note: This function is not ready yet.
-		The problem is during cv mode, intJ["last_timeStep"] will be updated during inner iterations
-		which is not the proper method.
-		
+		Use the polynomial approximation to sovle the 1D spherical equation
 		'''
-		
-		
+			
 		J = self.locCurrent(Iapp)
 
 		Ds = arrhenius(self.Ds['A'],self.Ds['Ea'],T)
-		#K = Ds/self.Rp/self.Rp
 		
 		intJ = self.calc_intJ(dt,Iapp)
 		c_avg = -3.0/self.Rp*intJ + self.cmax*self.soc0; #c_avg_pos_last_timeStep;
@@ -985,7 +980,7 @@ class singleCell:
 		else:
 			return self.timeData[-1,17]/self.capacity[referenceCapacity,2]
 		
-	def calcQheat(self, Iapp, soc_pos, soc_neg):
+	def calcQheat(self, Iapp):
 		'''
 		Calculate the heat generation of the cell. This is primarily used to calc the increase
 		in coolant temperature.
@@ -994,10 +989,10 @@ class singleCell:
 		Cp = self.Cp
 		V = self.totVolume
 		rho = (self.cathode.mass+self.sep.mass+self.anode.mass)/(self.cathode.volume+self.sep.volume+self.anode.volume)
-		dUdT_pos = dUdT(self.cathode.activeMaterialType,soc_pos)
-		dUdT_neg = dUdT(self.anode.activeMaterialType,soc_neg)
+		dUdT_pos = dUdT(self.cathode.activeMaterialType,self.cathode.soc)
+		dUdT_neg = dUdT(self.anode.activeMaterialType,self.anode.soc)
 		Rohmic = self.Rohm(Iapp)
-		Told = self.Temp(-1)
+		Told = self.T
 		eta_pos=self.cathode.eta
 		eta_neg=self.anode.eta
 		
@@ -1022,7 +1017,8 @@ class singleCell:
 		
 	def calcTemperature(self, Iapp, dt, totTime):		
 		'''
-		Solve a simple energy balance
+		Solve a simple energy balance found in Eq 16 of Guo2011
+		rho*V*Cp*dT/dt = IT*[dUpos/dT - dUneg/dT]+I*(eta_pos-eta_neg+I*R_ohm) - q
 		
 		'''
 		Cp = self.Cp
@@ -1037,6 +1033,7 @@ class singleCell:
 		Tamb = self.Tamb
 		eta_pos=self.cathode.eta
 		eta_neg=self.anode.eta
+		
 		numerator = Cp*rho*Told*V+dt*Rohmic*Iapp*Iapp+(dt*eta_pos-dt*eta_neg)*Iapp+dt*h*Tamb*Aexposed
 		denominator = Cp*rho*V+(dt*dUdT_neg-dt*dUdT_pos)*Iapp+dt*h*Aexposed
 		T = numerator/denominator		
@@ -1160,11 +1157,12 @@ class singleCell:
 				cvIteration = 0	
 
 		
-		#done cv iterations
-		
+		#done cv iterations -> move to next time step
+		self.calcQheat(Iapp)
 		self.cathode.save_lastTimeStep()
 		self.anode.save_lastTimeStep()
 		self.calcCapacity()
+		
 			
 	def cvGuess(self):
 		'''
@@ -1493,7 +1491,10 @@ class getInputs:
 		'''	
 
 		data = []
-		cols = [0,1,3,4,5]
+		
+		findCols = ["Step Type Index", "Step Condition", "Stop Type Index", "Stop Condition", "Max Time Step"]
+				
+		cols = []
 		
 		wb = xl.load_workbook(filename = self.workbook)
 		sheet = wb.get_sheet_by_name(name = worksheet)
@@ -1501,10 +1502,14 @@ class getInputs:
 		
 		max_num_data = numpy.shape(cells)[0]
 		
+		for i in range(numpy.shape(cells)[1]):
+			if (cells[1][i].value in findCols): cols.append(i-1)
+		
 		
 		id = self.findCells(cells,side)
 		startRow = id[0]+2
 		startCol = id[1]+1
+		
 		
 		for i in range(max_num_data):
 			try:
@@ -1516,7 +1521,7 @@ class getInputs:
 				break
 			except AttributeError:
 				break
-		
+
 		return numpy.array(data)
 
 		
@@ -1534,7 +1539,7 @@ def main():
 	while (run == 1):
 		cell1.schedule.advanceTime()
 		cell1.calcCellVoltage()
-		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc,cell1.T])
+		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc,cell1.T,cell1.Qheat])
 		#print("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc, cell1.anode.J['J'], cell1.anode.J_last_timeStep['J'],cell1.anode.intJ['present'],cell1.anode.intJ['last_timeStep']))
 		cell1.schedule.checkStopCondition(cell1.V['present'])
 		cell1.schedule.set_dt(cell1.V['present'])
@@ -1543,7 +1548,7 @@ def main():
 
 
 	print "Saving output to cell1.csv"
-	colNames="cycle,step,totTime,stepTime,I,V,dCap,cCap,posSOC,negSOC,Temp"
+	colNames="cycle,step,totTime[s],stepTime[s],I[A],V[V],dCap[As],cCap[As],posSOC,negSOC,Temp[K],Qheat[W/m^3]"
 	saveData('cell1.csv',data,headers=colNames)
 
 if __name__ == "__main__":		
