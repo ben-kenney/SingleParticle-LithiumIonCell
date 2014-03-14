@@ -63,6 +63,7 @@ def density(material):
 	'NMC': lambda : 4750.0,
 	'LCO': lambda : 5031.0,
 	'NCA': lambda : 4450.0,
+	'LMnO': lambda : 4290.0,
 	'MCMB1': lambda : 2260.0,
 	'MCMB2': lambda : 2260.0,
 	'PVDF': lambda : 1760.0,
@@ -72,6 +73,23 @@ def density(material):
 	'Alfoil': lambda : 2700.0,
 	'Cufoil': lambda : 8930.0}[material]()
 	return result
+
+
+def thermodynamicCapacity(material):
+	'''
+	Density of pure phase material [kg/m^3]
+	'''
+	
+	result = {
+	'NMC': lambda : 277.54,
+	'LCO': lambda : 273.8,
+	'NCA': lambda : 278.01,
+	'LMnO': lambda : 148.22,
+	'MCMB1': lambda : 363.0,
+	'MCMB2': lambda : 363.0}[material]()
+	return result	
+
+
 
 def returnDs(y, material):
 	''' 
