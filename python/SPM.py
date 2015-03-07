@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # to do:
 # Discharge and charge capacities don't match. Verify calculation in excel.
@@ -25,6 +25,11 @@ except:
 	
 
 def isNum(x):
+	'''
+	Check to see if argument is a number.
+	Returns true is x is a number, false if not
+	'''
+	
 	try:
 		float(x)
 		return True
@@ -77,7 +82,7 @@ def density(material):
 
 def thermodynamicCapacity(material):
 	'''
-	Density of pure phase material [kg/m^3]
+	Thermodynamic capacity of material (Ah/g)?
 	'''
 	
 	result = {
@@ -88,7 +93,6 @@ def thermodynamicCapacity(material):
 	'MCMB1': lambda : 363.0,
 	'MCMB2': lambda : 363.0}[material]()
 	return result	
-
 
 
 def returnDs(y, material):
@@ -103,7 +107,7 @@ def returnDs(y, material):
 
 def dUdT(material,soc):
 	''' 
-	return dU(soc)/dT for various materials 
+	Return dU(soc)/dT for various materials 
 	I don't think nmc is correct (Jeon 2011)
 	lco (Jeon2011)
 	'''
@@ -448,31 +452,7 @@ def timeControlSlow(dt, dt_fixed, voltage, dV, Iapp, step, stepIterations, IcutO
 	
 	return dt
 
-def parseConfigFile(fileName):
-	'''
-	Reads simulation parameters from a file where each group of parameters begins with @label
-	and the # is interpreted as a comment
-	'''
-	#fileName = 'config.dat'
-	f = open(fileName,'r')
-	keys1=[]; keys2=[]; values=[]
-	dict1={}; dict2={}
-	for line in f:
-		line = line.strip()
-		if (re.search(r'^#',line) or line == ''):
-			pass
-		elif (re.search(r'^@',line)):
-			dict2={}
-			keys1.append(line.split('#')[0])
-		else:
-			keys2.append(line.split('=')[0])
-			values.append(line.split('#')[0].split('=')[-1].lstrip().rstrip().split(' '))
-			dict2[keys2[-1]]=conv_numbers(values[-1])
-			dict1[keys1[-1]]=dict2
-	
-	f.close()
-	
-	return dict1
+
 			
 def arrhenius(phi_ref,Ea,T,T_ref=298.0):
 	''' 
@@ -493,15 +473,18 @@ class electrode:
 			except:
 				x=1
 			return x
-				
+			
+		''' Solid phase diffusion coefficient '''		
 		self.Ds = {'A':0, 'Ea':0}
 		self.Ds['A'] = {2:lambda:parameters['Ds'][0],1:lambda:parameters['Ds']}[returnLength(parameters['Ds'])]()
 		self.Ds['Ea'] = {2:lambda:parameters['Ds'][1],1:lambda:0}[returnLength(parameters['Ds'])]()
 		
+		''' Charge transfer rate constant '''
 		self.kct = {'A':0, 'Ea':0}
 		self.kct['A'] = {2:lambda:parameters['kct'][0],1:lambda:parameters['kct']}[returnLength(parameters['kct'])]()
 		self.kct['Ea'] = {2:lambda:parameters['kct'][1],1:lambda:0}[returnLength(parameters['kct'])]()
 		
+		''' Side reaction exchange current density '''
 		self.i0s = {'A':0, 'Ea':0}
 		self.i0s['A'] = {2:lambda:parameters['i0s'][0],1:lambda:parameters['i0s']}[returnLength(parameters['i0s'])]()
 		self.i0s['Ea'] = {2:lambda:parameters['i0s'][1],1:lambda:0}[returnLength(parameters['i0s'])]()
@@ -731,6 +714,9 @@ class electrode:
 		
 		elif (method == "pa"):
 			self.soc = self.polynomialApproximation(dt, Iapp, T)
+		
+		else:
+			print("Error: Please select either fd or pa for soc solver")
 									
 	def butlerVolmer(self, Iapp, ce, alpha, T):
 		''' Uses BV expression to calc eta '''
@@ -847,8 +833,20 @@ class separatorOrFoil:
 		return self.L/(self.area*ionicConductivity(ce, T, brugg, self.porosity))
 
 class singleCell:
-	def __init__(self, parametersFileName, cycleScheduleFileName, maxCycles,cellNumber,writeData,xlInterface=True):
+	def __init__(self, parameters_list, maxCycles,cellNumber,writeData):
 		
+		xlInterface = True; parametersFileName="";cycleScheduleFileName="";parameters_file=""
+		if (len(parameters_list) == 1):
+			parameters_file = parameters_list[0]
+			xlInterface = True
+		elif (len(parameters_list) == 2):
+			parameters_file = parameters_list[0]
+			cycleScheduleFileName = parameters_list[1]
+			xlInterface = False
+		else:
+			print("Wrong format for input parameters argument.")
+			
+						
 		def returnLength(parameter):
 			try:
 				x=len(parameter)
@@ -860,33 +858,24 @@ class singleCell:
 			return {True:lambda:"fd",False:lambda:"pa"}[string=="Finite difference"]()
 			
 		self.schedule = cycleSchedule(cycleScheduleFileName, maxCycles, xlInterface)
+				
+		inputs = getInputs(xlInterface, parameters_file)
+		pos_parms = inputs.positive
+		neg_parms = inputs.negative
+		sep_parms = inputs.separator
+		Alfoil_parms = inputs.Alfoil
+		Cufoil_parms = inputs.Cufoil
+		other_parms = inputs.others
+		self.pos_solver = inputs.pos_solver
+		self.neg_solver = inputs.neg_solver
 		
-		###### use the excel interface for specifying model parameters
-		if (xlInterface):
-			print "using excel interface"
-			xlInterface = getInputs("parameters.xlsx")
-			self.schedule.schedule = xlInterface.cycle.tolist() #use the excel file
-			self.schedule.getIapp()
-			pos_parms = xlInterface.positive
-			neg_parms = xlInterface.negative
-			sep_parms = xlInterface.separator
-			Alfoil_parms = xlInterface.Alfoil
-			Cufoil_parms = xlInterface.Cufoil
-			other_parms = xlInterface.others
-			self.pos_solver = returnSolver(xlInterface.positive["method"])
-			self.neg_solver = returnSolver(xlInterface.negative["method"])
-		else:
-			parameters = parseConfigFile(parametersFileName)
-			pos_parms = parameters['@pos']
-			neg_parms = parameters['@neg']
-			sep_parms = parameters['@sep']
-			Alfoil_parms = parameters['@Alfoil']
-			Cufoil_parms = parameters['@Cufoil']
-			other_parms = parameters['@others']	
-			self.pos_solver = "pa"
-			self.neg_solver = "pa"	
+		if (xlInterface): self.schedule.schedule = inputs.cycle.tolist()
+		self.schedule.getIapp()
 
 		self.T=other_parms["T"]	
+		
+		
+		print self.schedule.Iapp
 		
 		''' Instantiate cell component objects: '''
 
@@ -924,7 +913,7 @@ class singleCell:
 		self.capacity = {'cumulative_discharge':0,'cumulative_charge':0,'lastCycle_discharge':0,'lastCycle_charge':0,'nominal':0}
 		self.energy = {'cumulative_discharge':0,'cumulative_charge':0,'lastCycle_discharge':0,'lastCycle_charge':0,'nominal':0}
 		
-		self.calcCellVoltage() #initialize cell voltage at t=0
+		#self.calcCellVoltage() #initialize cell voltage at t=0
 		
 		self.IVList = numpy.zeros([1,2])
 			
@@ -1075,7 +1064,6 @@ class singleCell:
 		if (T > 60+273.15): print "Warning: T=",T,"K"
 		self.T = T
 
-	
 	def Rohm(self,Iapp):
 		'''
 		Returns the ohmic resistance of the cell. 
@@ -1104,7 +1092,7 @@ class singleCell:
 			#this is Ds(soc). the factor is a fitting parameter
 			if (self.cathode.activeMaterialType == 'NMC'): self.cathode.Ds['A'] = self.cathode.DsFactor*returnDs(self.cathode.soc,'NMC')
 		
-		
+			
 			self.cathode.calcSOC(dt, Iapp, totTime, self.T, method=self.pos_solver) #calc soc cathode
 			self.anode.calcSOC(dt, Iapp, totTime, self.T, method=self.neg_solver) #calc soc anode	
 				
@@ -1124,11 +1112,12 @@ class singleCell:
 			
 				VoldIt = V
 				V = self.cathode.phi["present"] - self.anode.phi["present"] + Iapp*self.Rohm(Iapp)
-			
-				if (numpy.abs(V-VoldIt) < 1e-4):
+				#if (cycle == 4): print("t={0}, V={1}").format(totTime,V)
+				dV_it = numpy.abs(V-VoldIt)
+				if (dV_it < 1e-4):
 					doneInternalIts = 1
 				elif (its > 10):
-					print("Warning: Internal voltage iterations are at {0} but moving on.".format(its))
+					print("Warning: Internal voltage iterations are at {0} and dV is {1} but moving on.".format(its,dV_it))
 					doneInternalIts = 1
 			
 			return V
@@ -1152,7 +1141,7 @@ class singleCell:
 			
 		while (cvIteration == 1):
 		
-		
+			
 			if (self.schedule.mode == "cc"):
 				Iapp = self.schedule.Iapp['present']
 			elif (self.schedule.mode == "cv"):
@@ -1180,8 +1169,7 @@ class singleCell:
 		self.cathode.save_lastTimeStep()
 		self.anode.save_lastTimeStep()
 		self.calcCapacity()
-		
-			
+					
 	def cvGuess(self):
 		'''
 		Guess current for constant voltage mode
@@ -1218,6 +1206,7 @@ class singleCell:
 		
 		#print("New guess for CV mode: I={0}".format(Iapp))
 		self.schedule.Iapp['present'] = Iapp
+
 					
 class cycleSchedule:
 	def __init__(self, scheduleFileName, maxCycles, xlInterface):
@@ -1347,7 +1336,7 @@ class cycleSchedule:
 			self.dt = {False:lambda:self.dt*1.05,True:lambda:maxdt}[self.dt >= maxdt]()
 		
 			if (self.schedule[self.step][2] == 0 and self.Iapp['present'] < 0 and numpy.abs(V - self.schedule[self.step][3]) < 0.35):
-				self.dt = {False:lambda:dt_old/1.12,True:lambda:0.1}[dt_old/1.10 < 0.1]()
+				self.dt = {False:lambda:dt_old/1.5,True:lambda:0.1}[dt_old/1.10 < 0.1]()
 			elif (self.schedule[self.step][2] == 0 and self.Iapp['present'] > 0 and numpy.abs(V - self.schedule[self.step][3]) < 0.25):
 				self.dt = {False:lambda:dt_old/1.10,True:lambda:0.1}[dt_old/1.10 < 0.1]()		
 			elif (self.schedule[self.step][2] == 2.0 and (self.stepTime+self.dt > self.schedule[self.step][3])):
@@ -1361,7 +1350,7 @@ class cycleSchedule:
 	def advanceTime(self):
 		self.stepTime+=self.dt
 		self.totTime+=self.dt
-
+	
 class getInputs:
 	'''
 	Grab input data from an excel spreadsheet using the openpyxl module
@@ -1371,19 +1360,41 @@ class getInputs:
 	parameters: inputs.positive,inputs.negative,inputs.Alfoil,inputs.Cufoil,inputs.Others,inputs.Separator
 	'''
 	
-	def __init__(self,workbook):
-		self.workbook = workbook
-		self.worksheet = ["parameters", "cycle"]
+	def __init__(self,xlInterface,input_file):
 		
-		search_string = ["Positive","Negative","Al Foil","Cu Foil","Others","Separator","Cycle Conditions"]
 		
-		self.positive = self.getParameters(search_string[0],self.worksheet[0])
-		self.negative = self.getParameters(search_string[1],self.worksheet[0])
-		self.Alfoil = self.getParameters(search_string[2],self.worksheet[0])
-		self.Cufoil = self.getParameters(search_string[3],self.worksheet[0])
-		self.others = self.getParameters(search_string[4],self.worksheet[0])
-		self.separator = self.getParameters(search_string[5],self.worksheet[0])
-		self.cycle = self.getCycleSchedule(search_string[6],self.worksheet[1])
+		if (xlInterface):
+			print("using excel interface")
+			self.workbook = input_file
+			self.worksheet = ["parameters", "cycle"]
+		
+			search_string = ["Positive","Negative","Al Foil","Cu Foil","Others","Separator","Cycle Conditions"]
+		
+			self.positive = self.getExcelParameters(search_string[0],self.worksheet[0])
+			self.negative = self.getExcelParameters(search_string[1],self.worksheet[0])
+			self.Alfoil = self.getExcelParameters(search_string[2],self.worksheet[0])
+			self.Cufoil = self.getExcelParameters(search_string[3],self.worksheet[0])
+			self.others = self.getExcelParameters(search_string[4],self.worksheet[0])
+			self.separator = self.getExcelParameters(search_string[5],self.worksheet[0])			
+			
+			#soc solver requires either pa or fd
+			self.pos_solver = {True:lambda:"pa",False:lambda:"fd"}[self.positive["method"]=="Polynomial approximation"]()
+			self.neg_solver = {True:lambda:"pa",False:lambda:"fd"}[self.negative["method"]=="Polynomial approximation"]()
+			self.cycle = self.getCycleSchedule(search_string[6],self.worksheet[1])
+					
+		else:
+			''' If using a csv file instead of excel interface '''
+			print("using csv interface\nWarning: polynomial approximation is hard coded here.")
+			csv_parameters = self.getCSVParameters(input_file)
+			self.positive = csv_parameters['@pos']
+			self.negative = csv_parameters['@neg']
+			self.separator = csv.parameters['@sep']
+			self.Alfoil = csv_parameters['@Alfoil']
+			self.Cufoil = csv_parameters['@Cufoil']
+			self.others = csv_parameters['@others']	
+			self.pos_solver = "pa"
+			self.neg_solver = "pa"
+			
 
 	def findCells(self,cells,search_string):
 		'''
@@ -1495,9 +1506,9 @@ class getInputs:
 		
 		return numpy.array(data)
 		
-	def getParameters(self,search_string,worksheet):
+	def getExcelParameters(self,search_string,worksheet):
 
-		wb = xl.load_workbook(filename = self.workbook)
+		wb = xl.load_workbook(filename = self.workbook,data_only=True)
 		sheet = wb.get_sheet_by_name(name = worksheet)
 		cells = sheet.rows
 	
@@ -1514,7 +1525,7 @@ class getInputs:
 				
 		cols = []
 		
-		wb = xl.load_workbook(filename = self.workbook)
+		wb = xl.load_workbook(filename = self.workbook,data_only=True)
 		sheet = wb.get_sheet_by_name(name = worksheet)
 		cells = sheet.rows		
 		
@@ -1542,10 +1553,44 @@ class getInputs:
 
 		return numpy.array(data)
 
+	def getCSVParameters(self,fileName):
+		'''
+		Reads simulation parameters from a file where each group of parameters begins with @label
+		and the # is interpreted as a comment
+		'''
+		#fileName = 'config.dat'
+		f = open(fileName,'r')
+		keys1=[]; keys2=[]; values=[]
+		dict1={}; dict2={}
+		for line in f:
+			line = line.strip()
+			if (re.search(r'^#',line) or line == ''):
+				pass
+			elif (re.search(r'^@',line)):
+				dict2={}
+				keys1.append(line.split('#')[0])
+			else:
+				keys2.append(line.split('=')[0])
+				values.append(line.split('#')[0].split('=')[-1].lstrip().rstrip().split(' '))
+				dict2[keys2[-1]]=conv_numbers(values[-1])
+				dict1[keys1[-1]]=dict2
+	
+		f.close()
+	
+		return dict1
 		
 #---------------------------------------------------------------------
 def main():
-	cell1 = singleCell("parameters0.dat","initial_steps.dat",maxCycles=5,cellNumber=1,writeData=0)
+	
+	'''
+	inputs = getInputs("parameters.xlsx")
+	print inputs.positive
+	print inputs.cycle
+	'''
+	
+	parameters_list = ["parameters.xlsx"]
+	##parameters_list = ["parameters0.dat","initial_steps.dat"]
+	cell1 = singleCell(parameters_list,maxCycles=3,cellNumber=1,writeData=1)
 	#schedule = cycleSchedule("initial_steps.dat", 2)
 
 	V = cell1.V
@@ -1566,8 +1611,9 @@ def main():
 
 
 	print "Saving output to cell1.csv"
-	colNames="cycle,step,totTime[s],stepTime[s],I[A],V[V],dCap[As],cCap[As],posSOC,negSOC,Temp[K],Qheat[W/m^3]"
+	colNames="cycle,step,totTime_s,stepTime_s,current_A,voltage_V,dCap_As,cCap_As,posSOC,negSOC,Temp_K,Qheat_Wm3"
 	saveData('cell1.csv',data,headers=colNames)
+	
 
 if __name__ == "__main__":		
 	start_time = time.time()
