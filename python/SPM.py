@@ -1120,6 +1120,8 @@ class singleCell:
 					print("Warning: Internal voltage iterations are at {0} and dV is {1} but moving on.".format(its,dV_it))
 					doneInternalIts = 1
 			
+			if (numpy.isnan(V)): print("Error: You're getting NaNs!"); sys.exit(0)			
+			
 			return V
 
 		def cv_residual(Iapp,Vtarget,cycle,totTime,dt):
@@ -1602,7 +1604,23 @@ def main():
 	while (run == 1):
 		cell1.schedule.advanceTime()
 		cell1.calcCellVoltage()
-		data = storeData(data, [cell1.schedule.cycle,cell1.schedule.step,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.schedule.Iapp['present'],cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc,cell1.T,cell1.Qheat])
+		
+		add_data = [
+		cell1.schedule.cycle,
+		cell1.schedule.step,
+		cell1.schedule.totTime,
+		cell1.schedule.stepTime,
+		cell1.schedule.Iapp['present'],
+		cell1.V['present'],
+		cell1.capacity["cumulative_discharge"],
+		cell1.capacity["cumulative_charge"],
+		cell1.cathode.soc,
+		cell1.anode.soc,
+		cell1.T,
+		cell1.Qheat
+		]
+		
+		data = storeData(data, add_data)
 		#print("{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}".format(cell1.schedule.cycle,cell1.schedule.totTime,cell1.schedule.stepTime,cell1.V['present'],cell1.capacity["cumulative_discharge"],cell1.capacity["cumulative_charge"],cell1.cathode.soc,cell1.anode.soc, cell1.anode.J['J'], cell1.anode.J_last_timeStep['J'],cell1.anode.intJ['present'],cell1.anode.intJ['last_timeStep']))
 		cell1.schedule.checkStopCondition(cell1.V['present'])
 		cell1.schedule.set_dt(cell1.V['present'])
