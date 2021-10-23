@@ -789,10 +789,10 @@ class electrode:
                                                                            0.5) * numpy.power(soc * self.cmax,
                                                                                               0.5) * numpy.power(ce,
                                                                                                                  0.5)
-        self.butlerVolmer(J, ce, soc, alpha, T)
+        #self.butlerVolmer(J, ce, soc, alpha, T)
+        #self.butlerVolmer(J, ce, alpha, T)
 
-        Y = i0 * (alpha * F / Rg / T * numpy.exp(alpha * F / Rg / T * self.eta) + alpha * F / Rg / T * numpy.exp(
-            -alpha * F / Rg / T * self.eta))
+        Y = i0 * (alpha * F / Rg / T * numpy.exp(alpha * F / Rg / T * self.eta) + alpha * F / Rg / T * numpy.exp(-alpha * F / Rg / T * self.eta))
         self.Rp_val = 1.0 / Y + Rsei
         return self.Rp_val / self.surfaceArea * self.area
 
@@ -930,7 +930,7 @@ class singleCell:
 
         self.T = other_parms["T"]
 
-        print self.schedule.Iapp
+        print(self.schedule.Iapp)
 
         ' Instantiate cell component objects: '
 
@@ -1125,7 +1125,7 @@ class singleCell:
 
 		T = Told + (1/6)*(K1+2*K2+2*K3+K4)*dt
 		'''
-        if (T > 60 + 273.15): print "Warning: T=", T, "K"
+        if (T > 60 + 273.15): print("Warning: T=", T, "K")
         self.T = T
 
     def Rohm(self, Iapp):
@@ -1561,7 +1561,7 @@ class getInputs:
 
         wb = xl.load_workbook(filename=self.workbook)
         sheet = wb.get_sheet_by_name(name=worksheet)
-        cells = sheet.rows
+        cells = [item for item in sheet.rows]
 
         id = self.findCells(cells, side)
         startRow = id[0] + 3
@@ -1584,7 +1584,7 @@ class getInputs:
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
         sheet = wb.get_sheet_by_name(name=worksheet)
-        cells = sheet.rows
+        cells = [item for item in sheet.rows]
 
         return self.returnInputs(cells, self.findCells(cells, search_string))
 
@@ -1601,7 +1601,7 @@ class getInputs:
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
         sheet = wb.get_sheet_by_name(name=worksheet)
-        cells = sheet.rows
+        cells = [item for item in sheet.rows]
 
         max_num_data = numpy.shape(cells)[0]
 
@@ -1668,11 +1668,13 @@ def main():
     writeData -> save data
     """
 
+    maxCycles = 4
+    
     colNames = "cycle,step,totTime_s,stepTime_s,current_A,voltage_V,dCap_As,cCap_As,posSOC,negSOC,Temp_K,Qheat_Wm3"
 
     parameters_list = ["supporting_files/parameters.xlsx"]
-    # parameters_list = ["parameters0.dat","initial_steps.dat"]
-    cell1 = singleCell(parameters_list, maxCycles=1, cellNumber=1, writeData=1)
+
+    cell1 = singleCell(parameters_list, maxCycles=maxCycles, cellNumber=1, writeData=1)
     # schedule = cycleSchedule("initial_steps.dat", 2)
 
     V = cell1.V
@@ -1715,11 +1717,11 @@ def main():
         # check for end of simulation
         run = {True: lambda: 0, False: lambda: 1}[cell1.schedule.cycle > cell1.schedule.maxCycles]()
 
-    print "Saving last cycle to data directory"
+    print("Saving last cycle to data directory")
     file_name = "data/cell1_{cycle}.csv".format(cycle=cell1.schedule.last_cycle)
     saveData(file_name,data,headers=colNames)
 
 if __name__ == "__main__":
     start_time = time.time()
     main()
-    print time.time() - start_time, " seconds"
+    print(time.time() - start_time, " seconds")
