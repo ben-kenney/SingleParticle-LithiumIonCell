@@ -308,8 +308,8 @@ def ionicConductivity(ce, T, brugg, porosity):
 
     sigma = 0.0001 * ce * numpy.power(
         -10.5 + 0.000668 * ce + 0.000000494 * ce * ce + 0.074 * T - 0.0000178 * T * ce - 0.000000000886 * ce * ce * T - 0.0000696 * T * T + 0.000000028 * T * T * ce,
-        2);
-    return sigma * numpy.power(porosity, brugg);
+        2)
+    return sigma * numpy.power(porosity, brugg)
 
 
 # -----------------------------------------------
@@ -517,7 +517,7 @@ class electrode:
 
         self.DsFactor = parameters['DsFactor']
 
-        ' side reaction parameters '
+        # side reaction parameters
         self.Ms = parameters['Ms']  # molar mass of sei
         self.rhos = parameters['rhos']  # density of sei
         self.Lsei = {'present': parameters['Lsei'], 'last_timeStep': parameters['Lsei']}  # sei thickness
@@ -526,7 +526,7 @@ class electrode:
         self.ks = parameters['ks']  # conductivity of sei
         self.Rsei = parameters['Rsei']  # sei resistance
 
-        ' structural and design parameters: '
+        # structural and design parameters:
         self.L = parameters['L']
         self.capacity = parameters['capacity']
         self.area = parameters['area']
@@ -542,7 +542,7 @@ class electrode:
         self.Eref_fudge = 0
 
 
-        #calculated values
+        # calculated values
         self.volume = self.area * self.L
         self.porosity = self.porosity()
         self.volFracAM = self.volFracSolids(self.activeMaterialType)
@@ -569,7 +569,7 @@ class electrode:
         self.eta = 0
         self.Rp_val = 0
 
-        ' this is Ds(soc). the factor is a fitting parameter '
+        # this is Ds(soc). the factor is a fitting parameter
         if (self.activeMaterialType == 'NMC'): self.Ds['A'] = self.DsFactor * returnDs(self.soc, 'NMC')
 
     def volFracSolids(self, species):
@@ -670,11 +670,11 @@ class electrode:
 
             ''' new way to generate D1/D2 matrix'''
             D1 = numpy.eye(N) * -2 + numpy.eye(N, k=1) + numpy.eye(N, k=-1)
-            D1[0, 1] = 2;
-            D1[-1, -2] = 2;
-            x1 = numpy.zeros([N]);
+            D1[0, 1] = 2
+            D1[-1, -2] = 2
+            x1 = numpy.zeros([N])
             x1[2:] = 1 / x[1:-1]
-            x2 = numpy.zeros([N]);
+            x2 = numpy.zeros([N])
             x2[:N - 2] = -1 / x[1:-1]
             D2 = numpy.eye(N, N, k=1) * x1 + numpy.eye(N, N, k=-1) * x2
 
@@ -713,7 +713,7 @@ class electrode:
     def calc_intJ(self, dt, Iapp):
         J = self.locCurrent(Iapp)
         self.intJ['present'] = self.intJ['last_timeStep'] + ((J / 96485.0 + self.J_last_timeStep[
-            'J'] / 96485.0) / 2.0) * dt;
+            'J'] / 96485.0) / 2.0) * dt
         return self.intJ['present']
 
     def polynomialApproximation(self, dt, Iapp, T):
@@ -727,10 +727,10 @@ class electrode:
         Ds = arrhenius(self.Ds['A'], self.Ds['Ea'], T)
 
         intJ = self.calc_intJ(dt, Iapp)
-        c_avg = -3.0 / self.Rp * intJ + self.cmax * self.soc0;  # c_avg_pos_last_timeStep;
-        c_surf = (-J / 96485.0 / 5.0 + c_avg * Ds / self.Rp) * self.Rp / Ds;
+        c_avg = -3.0 / self.Rp * intJ + self.cmax * self.soc0 # c_avg_pos_last_timeStep
+        c_surf = (-J / 96485.0 / 5.0 + c_avg * Ds / self.Rp) * self.Rp / Ds
 
-        return c_surf / self.cmax;
+        return c_surf / self.cmax
 
     def calcSOC(self, dt, Iapp, totTime, T, method="fd"):
         '''
@@ -769,11 +769,11 @@ class electrode:
         C2 = numpy.sqrt(J * J + 4.0 * i0 * i0) / (2.0 * i0)
         constant_1 = (C1 - C2)
         constant_2 = (C1 + C2)
-        constant = numpy.maximum(constant_1, constant_2);
+        constant = numpy.maximum(constant_1, constant_2)
         if (constant_1 / constant_2 > 0):
             print("Check butlerVolmer(): both constants are same sign")
 
-        self.eta = Rg * T / F / alpha * numpy.log(constant);
+        self.eta = Rg * T / F / alpha * numpy.log(constant)
         return self.eta
 
     def RpCalc(self, J, ce, T, Rsei):
@@ -888,9 +888,9 @@ class singleCell:
 
     def __init__(self, parameters_list, maxCycles, cellNumber, writeData):
 
-        xlInterface = True;
-        parametersFileName = "";
-        cycleScheduleFileName = "";
+        xlInterface = True
+        parametersFileName = ""
+        cycleScheduleFileName = ""
         parameters_file = ""
         if len(parameters_list) == 1:
             parameters_file = parameters_list[0]
@@ -932,7 +932,7 @@ class singleCell:
 
         print(self.schedule.Iapp)
 
-        ' Instantiate cell component objects: '
+        #Instantiate cell component objects:
 
         self.cathode = electrode(pos_parms, 1, cellNumber, writeData, self.T)
         self.anode = electrode(neg_parms, 2, cellNumber, writeData, self.T)
@@ -1188,7 +1188,9 @@ class singleCell:
                                                                                                               dV_it))
                     doneInternalIts = 1
 
-            if (numpy.isnan(V)): print("Error: You're getting NaNs!"); sys.exit(0)
+            if (numpy.isnan(V)): 
+                print("Error: You're getting NaNs!")
+                sys.exit(0)
 
             return V
 
@@ -1255,13 +1257,13 @@ class singleCell:
         Vtarget = self.schedule.schedule[self.schedule.step][1]
 
         if (numpy.shape(self.IVList)[0] < 2):
-            'List not long enough to interpolate'
+            # List not long enough to interpolate
             if (self.IVList[-1, 1] > Vtarget):
                 Iapp = Iapp / 1.001
             else:
                 Iapp = Iapp * 1.001
         else:
-            'List should be long enough to interpolate'
+            # List should be long enough to interpolate
             # Ig = I1+(Vtar-V1)*(I2-I1)/(V2-V1)
             V1 = self.IVList[-2, 1]
             V2 = self.IVList[-1, 1]
@@ -1374,11 +1376,11 @@ class cycleSchedule:
 
         # set the next current
         if (self.schedule[self.step][0] == 0):
-            'next step is a constant current step'
+            # next step is a constant current step
             self.Iapp['present'] = self.schedule[self.step][1]
             self.mode = "cc"
         elif (self.schedule[self.step][0] == 1):
-            'next step is a constant voltage step'
+            # next step is a constant voltage step
             self.mode = "cv"
 
         print("cycle: {0}\tstep: {1}\t{2}".format(self.cycle, self.step, self.schedule[self.step]))
@@ -1479,12 +1481,12 @@ class getInputs:
         maxRows = numpy.shape(cells)[0]
         maxCols = numpy.shape(cells)[1]
 
-        col = 0;
+        col = 0
         row = 0
         for i in range(maxRows):
             for j in range(maxCols):
                 if (cells[i][j].value == search_string):
-                    col = j;
+                    col = j
                     row = i
                     return [row, col]
 
@@ -1632,10 +1634,10 @@ class getInputs:
 		'''
         # fileName = 'config.dat'
         f = open(fileName, 'r')
-        keys1 = [];
-        keys2 = [];
+        keys1 = []
+        keys2 = []
         values = []
-        dict1 = {};
+        dict1 = {}
         dict2 = {}
         for line in f:
             line = line.strip()
