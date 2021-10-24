@@ -494,18 +494,18 @@ class electrode:
                 x = 1
             return x
 
-        ' Solid phase diffusion coefficient '
+        # Solid phase diffusion coefficient
         self.Ds = {'A': 0, 'Ea': 0}
         self.Ds['A'] = {2: lambda: parameters['Ds'][0], 1: lambda: parameters['Ds']}[returnLength(parameters['Ds'])]()
         self.Ds['Ea'] = {2: lambda: parameters['Ds'][1], 1: lambda: 0}[returnLength(parameters['Ds'])]()
 
-        ' Charge transfer rate constant '
+        # Charge transfer rate constant '
         self.kct = {'A': 0, 'Ea': 0}
         self.kct['A'] = {2: lambda: parameters['kct'][0], 1: lambda: parameters['kct']}[
             returnLength(parameters['kct'])]()
         self.kct['Ea'] = {2: lambda: parameters['kct'][1], 1: lambda: 0}[returnLength(parameters['kct'])]()
 
-        ' Side reaction exchange current density '
+        # Side reaction exchange current density '
         self.i0s = {'A': 0, 'Ea': 0}
         self.i0s['A'] = {2: lambda: parameters['i0s'][0], 1: lambda: parameters['i0s']}[
             returnLength(parameters['i0s'])]()
@@ -1462,7 +1462,7 @@ class getInputs:
             csv_parameters = self.getCSVParameters(input_file)
             self.positive = csv_parameters['@pos']
             self.negative = csv_parameters['@neg']
-            self.separator = csv.parameters['@sep']
+            self.separator = csv_parameters['@sep']
             self.Alfoil = csv_parameters['@Alfoil']
             self.Cufoil = csv_parameters['@Cufoil']
             self.others = csv_parameters['@others']
