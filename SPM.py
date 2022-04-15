@@ -1,28 +1,16 @@
-#!/usr/bin/env python
-
 # to do:
 # Discharge and charge capacities don't match. Verify calculation in excel.
 
 
-import numpy, os, sys, random, shutil, re, time
+import numpy
+import sys
+import re
+import time
 import openpyxl as xl
-from scipy.special import erfc
 from scipy.integrate import cumtrapz
-import scipy.sparse as sparse
 import scipy.optimize
-from operator import itemgetter
-from time import clock
-from datetime import datetime
-
-try:
-    import sqlite3 as sqlite
-except ImportError:
-    import sqlite as sqlite  # cluster
-try:
-    import scipy.sparse.linalg
-except ImportError:
-    from scipy.linalg import inv  # cluster
-    import scipy  # cluster
+import pathlib
+import scipy.sparse.linalg
 
 
 def isNum(x):
