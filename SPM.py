@@ -1,28 +1,16 @@
-#!/usr/bin/env python
-
 # to do:
 # Discharge and charge capacities don't match. Verify calculation in excel.
 
 
-import numpy, os, sys, random, shutil, re, time
+import numpy
+import sys
+import re
+import time
 import openpyxl as xl
-from scipy.special import erfc
 from scipy.integrate import cumtrapz
-import scipy.sparse as sparse
 import scipy.optimize
-from operator import itemgetter
-from time import clock
-from datetime import datetime
-
-try:
-    import sqlite3 as sqlite
-except ImportError:
-    import sqlite as sqlite  # cluster
-try:
-    import scipy.sparse.linalg
-except ImportError:
-    from scipy.linalg import inv  # cluster
-    import scipy  # cluster
+import pathlib
+import scipy.sparse.linalg
 
 
 def isNum(x):
@@ -1722,9 +1710,7 @@ class singleCell:
                     doneInternalIts = 1
                 elif its > 10:
                     print(
-                        "Warning: Internal voltage iterations are at {0} and dV is {1} but moving on.".format(
-                            its, dV_it
-                        )
+                        f"Warning: Internal voltage iterations are at {its} and dV is {dV_it} but moving on."
                     )
                     doneInternalIts = 1
 
@@ -1945,11 +1931,7 @@ class cycleSchedule:
             # next step is a constant voltage step
             self.mode = "cv"
 
-        print(
-            "cycle: {0}\tstep: {1}\t{2}".format(
-                self.cycle, self.step, self.schedule[self.step]
-            )
-        )
+        print(f"cycle: {self.cycle}\tstep: {self.step}\t{self.schedule[self.step]}")
         # print("old cycle {0}, new cycle {1}").format(self.last_cycle, self.cycle)
 
     def set_dt(self, V, force=0):
@@ -2184,7 +2166,7 @@ class getInputs:
     def getExcelParameters(self, search_string, worksheet):
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
-        sheet = wb.get_sheet_by_name(name=worksheet)
+        sheet = wb[worksheet]
         cells = [item for item in sheet.rows]
 
         return self.returnInputs(cells, self.findCells(cells, search_string))
@@ -2207,7 +2189,7 @@ class getInputs:
         cols = []
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
-        sheet = wb.get_sheet_by_name(name=worksheet)
+        sheet = wb[worksheet]
         cells = [item for item in sheet.rows]
 
         max_num_data = numpy.shape(cells)[0]
@@ -2285,11 +2267,15 @@ def main():
 
     parameters_list = ["supporting_files/parameters.xlsx"]
 
+    # create the data directory
+    data_dir = pathlib.Path().cwd() / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     cell1 = singleCell(parameters_list, maxCycles=maxCycles, cellNumber=1, writeData=1)
     # schedule = cycleSchedule("initial_steps.dat", 2)
 
     V = cell1.V
-    print("Starting condition: {voltage}").format(voltage=V)
+    print(f"Starting condition: {V}")
     time = 0
     run = 1
     data = 1
@@ -2299,10 +2285,8 @@ def main():
 
         # write data to file after each cycle
         if cell1.schedule.cycle > cell1.schedule.last_cycle:
-            print("saving data for cycle {cycle}").format(
-                cycle=cell1.schedule.last_cycle
-            )
-            file_name = "data/cell1_{cycle}.csv".format(cycle=cell1.schedule.last_cycle)
+            print(f"saving data for cycle {cell1.schedule.last_cycle}")
+            file_name = data_dir / f"cell1_{cell1.schedule.last_cycle}.csv"
             saveData(file_name, data, headers=colNames)
             data = None
 
@@ -2333,7 +2317,7 @@ def main():
         ]()
 
     print("Saving last cycle to data directory")
-    file_name = "data/cell1_{cycle}.csv".format(cycle=cell1.schedule.last_cycle)
+    file_name = data_dir / f"cell1_{cell1.schedule.last_cycle}.csv"
     saveData(file_name, data, headers=colNames)
 
 
