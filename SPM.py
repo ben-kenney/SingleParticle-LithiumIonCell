@@ -2166,7 +2166,7 @@ class getInputs:
     def getExcelParameters(self, search_string, worksheet):
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
-        sheet = wb.get_sheet_by_name(name=worksheet)
+        sheet = wb[worksheet]
         cells = [item for item in sheet.rows]
 
         return self.returnInputs(cells, self.findCells(cells, search_string))
@@ -2189,7 +2189,7 @@ class getInputs:
         cols = []
 
         wb = xl.load_workbook(filename=self.workbook, data_only=True)
-        sheet = wb.get_sheet_by_name(name=worksheet)
+        sheet = wb[worksheet]
         cells = [item for item in sheet.rows]
 
         max_num_data = numpy.shape(cells)[0]
