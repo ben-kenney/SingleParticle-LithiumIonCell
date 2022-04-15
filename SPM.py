@@ -1710,9 +1710,7 @@ class singleCell:
                     doneInternalIts = 1
                 elif its > 10:
                     print(
-                        "Warning: Internal voltage iterations are at {0} and dV is {1} but moving on.".format(
-                            its, dV_it
-                        )
+                        f"Warning: Internal voltage iterations are at {its} and dV is {dV_it} but moving on."
                     )
                     doneInternalIts = 1
 
@@ -1933,11 +1931,7 @@ class cycleSchedule:
             # next step is a constant voltage step
             self.mode = "cv"
 
-        print(
-            "cycle: {0}\tstep: {1}\t{2}".format(
-                self.cycle, self.step, self.schedule[self.step]
-            )
-        )
+        print(f"cycle: {self.cycle}\tstep: {self.step}\t{self.schedule[self.step]}")
         # print("old cycle {0}, new cycle {1}").format(self.last_cycle, self.cycle)
 
     def set_dt(self, V, force=0):
@@ -2273,11 +2267,15 @@ def main():
 
     parameters_list = ["supporting_files/parameters.xlsx"]
 
+    # create the data directory
+    data_dir = pathlib.Path().cwd() / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     cell1 = singleCell(parameters_list, maxCycles=maxCycles, cellNumber=1, writeData=1)
     # schedule = cycleSchedule("initial_steps.dat", 2)
 
     V = cell1.V
-    print("Starting condition: {voltage}").format(voltage=V)
+    print(f"Starting condition: {V}")
     time = 0
     run = 1
     data = 1
@@ -2287,10 +2285,8 @@ def main():
 
         # write data to file after each cycle
         if cell1.schedule.cycle > cell1.schedule.last_cycle:
-            print("saving data for cycle {cycle}").format(
-                cycle=cell1.schedule.last_cycle
-            )
-            file_name = "data/cell1_{cycle}.csv".format(cycle=cell1.schedule.last_cycle)
+            print(f"saving data for cycle {cell1.schedule.last_cycle}")
+            file_name = data_dir / f"cell1_{cell1.schedule.last_cycle}.csv"
             saveData(file_name, data, headers=colNames)
             data = None
 
@@ -2321,7 +2317,7 @@ def main():
         ]()
 
     print("Saving last cycle to data directory")
-    file_name = "data/cell1_{cycle}.csv".format(cycle=cell1.schedule.last_cycle)
+    file_name = data_dir / f"cell1_{cell1.schedule.last_cycle}.csv"
     saveData(file_name, data, headers=colNames)
 
 
