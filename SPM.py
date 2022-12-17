@@ -666,7 +666,7 @@ def saveData(fileName, data, headers):
 
     if sum(data[0, :]) == 0:
         data = numpy.delete(data, 0, 0)
-    numpy.savetxt(fileName, data, delimiter=",", header=headers)
+    numpy.savetxt(fileName, data, delimiter=",", header=headers, comments="")
 
 
 # -----------------------------------------------
