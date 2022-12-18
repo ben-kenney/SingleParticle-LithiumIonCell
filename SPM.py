@@ -2278,7 +2278,7 @@ def main():
 
     colNames = "cycle,step,totTime_s,stepTime_s,current_A,voltage_V,dCap_As,cCap_As,posSOC,negSOC,Temp_K,Qheat_Wm3,Rint_ohm"
 
-    parameters_list = ["supporting_files/parameters - volvo.xlsx"]
+    parameters_list = ["supporting_files/parameters.xlsx"]
 
     # create the data directory
     data_dir = pathlib.Path().cwd() / "data"
