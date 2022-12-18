@@ -1815,7 +1815,7 @@ class singleCell:
         self.schedule.Iapp["present"] = Iapp
 
     def Rinternal(self, Iapp):
-        """Return the internal resistnace of the cell in Ohm"""
+        """Return the internal resistance of the cell in Ohm"""
 
         self.Rint = (
             self.anode.RpCalc(self.ce, self.T)
