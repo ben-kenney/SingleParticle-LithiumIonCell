@@ -666,7 +666,7 @@ def saveData(fileName, data, headers):
 
     if sum(data[0, :]) == 0:
         data = numpy.delete(data, 0, 0)
-    numpy.savetxt(fileName, data, delimiter=",", header=headers)
+    numpy.savetxt(fileName, data, delimiter=",", header=headers, comments="")
 
 
 # -----------------------------------------------
@@ -862,6 +862,7 @@ class electrode:
     def __init__(self, parameters, electrodeType, cellNumber, writeData, T):
         """kinetic and transport parameters:"""
 
+        # Used to determine if we should apply Arrhenius kinetics
         def returnLength(parameter):
             try:
                 x = len(parameter)
@@ -878,7 +879,7 @@ class electrode:
             returnLength(parameters["Ds"])
         ]()
 
-        # Charge transfer rate constant '
+        # Charge transfer rate constant
         self.kct = {"A": 0, "Ea": 0}
         self.kct["A"] = {2: lambda: parameters["kct"][0], 1: lambda: parameters["kct"]}[
             returnLength(parameters["kct"])
@@ -887,7 +888,7 @@ class electrode:
             returnLength(parameters["kct"])
         ]()
 
-        # Side reaction exchange current density '
+        # Side reaction exchange current density
         self.i0s = {"A": 0, "Ea": 0}
         self.i0s["A"] = {2: lambda: parameters["i0s"][0], 1: lambda: parameters["i0s"]}[
             returnLength(parameters["i0s"])
