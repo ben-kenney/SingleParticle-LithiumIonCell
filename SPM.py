@@ -1204,7 +1204,7 @@ class electrode:
         self.eta = Rg * T / F / alpha * numpy.log(constant)
         return self.eta
 
-    def RpCalc(self, J, ce, T, Rsei):
+    def RpCalc(self, ce, T):
         """
         Calculates polarization resistance of electrode using di/deta ohm m^2 geometric area
         """
@@ -1227,7 +1227,7 @@ class electrode:
             alpha * F / Rg / T * numpy.exp(alpha * F / Rg / T * self.eta)
             + alpha * F / Rg / T * numpy.exp(-alpha * F / Rg / T * self.eta)
         )
-        self.Rp_val = 1.0 / Y + Rsei
+        self.Rp_val = 1.0 / Y + self.Rsei
         return self.Rp_val / self.surfaceArea * self.area
 
     def potential(self, Iapp, ce, alpha, T):
@@ -1375,6 +1375,7 @@ class singleCell:
         self.schedule.getIapp()
 
         self.T = other_parms["T"]
+        self.Rint = 0.0  # this is set through self.Rint()
 
         print(self.schedule.Iapp)
 
@@ -1631,7 +1632,7 @@ class singleCell:
 		T = Told + (1/6)*(K1+2*K2+2*K3+K4)*dt
 		"""
         if T > 60 + 273.15:
-            print("Warning: T=", T, "K")
+            print("Warning: T=", T - 273.15, "degC")
         self.T = T
 
     def Rohm(self, Iapp):
@@ -1755,6 +1756,9 @@ class singleCell:
             if not self.isothermal:
                 self.calcTemperature(Iapp, dt, totTime)
 
+            # Calculate the internal cell resistance
+            self.Rinternal(Iapp)
+
             self.V["present"] = V_cell(Iapp, cycle, totTime, dt)
 
             if (
@@ -1809,6 +1813,15 @@ class singleCell:
 
         # print("New guess for CV mode: I={0}".format(Iapp))
         self.schedule.Iapp["present"] = Iapp
+
+    def Rinternal(self, Iapp):
+        """Return the internal resistance of the cell in Ohm"""
+
+        self.Rint = (
+            self.anode.RpCalc(self.ce, self.T)
+            + self.cathode.RpCalc(self.ce, self.T)
+            + self.Rohm(Iapp)
+        )
 
 
 class cycleSchedule:
@@ -2263,7 +2276,7 @@ def main():
 
     maxCycles = 4
 
-    colNames = "cycle,step,totTime_s,stepTime_s,current_A,voltage_V,dCap_As,cCap_As,posSOC,negSOC,Temp_K,Qheat_Wm3"
+    colNames = "cycle,step,totTime_s,stepTime_s,current_A,voltage_V,dCap_As,cCap_As,posSOC,negSOC,Temp_K,Qheat_Wm3,Rint_ohm"
 
     parameters_list = ["supporting_files/parameters.xlsx"]
 
@@ -2306,6 +2319,7 @@ def main():
             cell1.anode.soc,
             cell1.T,
             cell1.Qheat,
+            cell1.Rint,
         ]
 
         data = storeData(data, add_data)
