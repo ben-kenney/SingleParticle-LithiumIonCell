@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-
-import numpy
 import pandas
 import matplotlib.pyplot as plt
 import pathlib
@@ -8,50 +5,17 @@ import pathlib
 pandas.options.mode.chained_assignment = None  # default='warn'
 
 
-def returnNumpyData(file, delimiter=",", cols=None):
-    """
-    Read in a text file and return as a numpy array
-    cols = a list of column indices to retrieve, starting with 0
-    """
-    data = numpy.genfromtxt(file, delimiter=delimiter, usecols=cols)
-    data = data[~numpy.isnan(data).any(1)]
-    return data
-
-
-def loadNumpyData(file, delimiter=","):
-    return numpy.loadtxt(file, delimiter=delimiter)
-
-
-def returnHeaders(file, kind="dict", delimiter=","):
-    """
-    Returns the header info as a dictionary of column indices or just an array
-    """
-    import linecache
-
-    retrieved_line = linecache.getline(file, 1).strip()
-    retrieved_line = retrieved_line.replace("# ", "")
-    headers = retrieved_line.split(",")
-
-    if kind == "dict":
-        index = range(0, len(headers))
-        return dict(zip(headers, index))
-    else:
-        return headers
-
-
 def returnCycleCapacity(dataFrame):
     """
     Returns a list of the discharge and charge capacities (in Ah) vs cycle number
     """
     caps = []
-    numCycles = max(dataFrame.cycle)
-    # for i in range(0, int(numCycles)):
     for i in dataFrame.cycle.unique():
-        dc = dataFrame.dCap_As[dataFrame.cycle == float(i + 1)]
+        dc = dataFrame.dCap_As[dataFrame.cycle == float(i)]
         dci = dc.index[len(dc) - 1]
-        cc = dataFrame.cCap_As[dataFrame.cycle == float(i + 1)]
+        cc = dataFrame.cCap_As[dataFrame.cycle == float(i)]
         cci = cc.index[len(cc) - 1]
-        caps.append([i + 1, dc[dci] / 3600.0, cc[cci] / 3600.0])
+        caps.append([i, dc[dci] / 3600.0, cc[cci] / 3600.0])
 
     caps = pandas.DataFrame(caps, columns=["cycle", "dCap_Ah", "cCap_Ah"])
     return caps
@@ -87,22 +51,6 @@ def splitByCycle(dataFrame):
         cycles.append(tmp)
 
     return cycles
-
-
-def splitByCycle_numpy(numpy_data):
-    cycle_index = []
-    cycle_data = []
-    cycle = 0
-    cycle_index.append(0.0)
-
-    for i in range(len(numpy_data)):
-        if numpy_data[i, 0] != cycle:
-            cycle_index.append(i)
-            cycle = cycle + 1
-            tmp = numpy_data[cycle_index[-2] : cycle_index[-1] - 1, :]
-            cycle_data.append(tmp)
-
-    return cycle_data
 
 
 def splitByStep(dataFrame, grab_step):
@@ -156,15 +104,21 @@ def plotData(x, y):
 
 def main():
 
-    filename = pathlib.Path().cwd() / "data" / "cell1_1.csv"
-    # data = pandas.DataFrame(loadNumpyData(filename),columns=returnHeaders(filename,kind='arr'))
-    data = loadNumpyData(filename)
+    data_directory = pathlib.Path().cwd() / "data"
+    all_files = data_directory.glob("*.csv")
+
+    df = pandas.concat((pandas.read_csv(f) for f in all_files), ignore_index=True)
+
+    # capacity
+    print(returnCycleCapacity(df))
 
     # returnCycleCapacity(data)
-    cycle_data = splitByCycle_numpy(data)
+
     # print cycle_data[3].voltage_V
     # plotData(cycle_data[3].totTime_s/3600.0,cycle_data[3].voltage_V)
-    plotData(cycle_data[1][:, 2] / 3600.0, cycle_data[1][:, 5])
+
+    # plotData(cycle_data[1][:, 2] / 3600.0, cycle_data[1][:, 5])
+
     # steps = splitByStep(cycle_data[3],[0,4,8,12])
     # plotData(steps[2].totTime_s/3600.0,steps[2].voltage_V)
 
